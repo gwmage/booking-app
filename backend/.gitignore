@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Env / secrets (절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
+# Databases (any location)
+*.db
+*.db-journal
+*.sqlite
+**/dev.db
+
+# Build / logs
+dist/
+*.log

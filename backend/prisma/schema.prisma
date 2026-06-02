@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 예약 한 건. 핵심은 @@unique([date, slot]) — 같은 날짜+시간은 단 하나만 존재 가능(이중 예약 차단).
+model Booking {
+  id        Int      @id @default(autoincrement())
+  date      String // "2024-06-08"
+  slot      String // "14:00"
+  name      String
+  phone     String
+  status    String   @default("confirmed") // confirmed / canceled
+  createdAt DateTime @default(now())
+
+  @@unique([date, slot])
+}
+
+// 영업시간·슬롯 설정 (정책 값을 코드에 박지 않고 분리)
+model Setting {
+  id        Int @id @default(autoincrement())
+  openHour  Int @default(10) // 영업 시작 시각
+  closeHour Int @default(18) // 영업 종료 시각
+  slotMin   Int @default(60) // 슬롯 길이(분)
+}

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>예약하기 — 이중 예약 없는 예약 앱</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style> body { font-family: 'Malgun Gothic', system-ui, sans-serif; } </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <div class="max-w-2xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold text-slate-800">상담 예약</h1>
+      <p class="text-slate-500 mt-1">원하는 시간을 선택하세요. 이미 예약된 시간은 선택할 수 없습니다.</p>
+    </header>
+
+    <!-- 날짜 선택 -->
+    <div class="bg-white rounded-xl shadow-sm p-5 mb-5">
+      <label class="block text-sm font-semibold text-slate-700 mb-2">날짜</label>
+      <input id="date" type="date" class="border border-slate-300 rounded-lg px-3 py-2 w-48" />
+    </div>
+
+    <!-- 슬롯 그리드 -->
+    <div class="bg-white rounded-xl shadow-sm p-5 mb-5">
+      <h2 class="text-sm font-semibold text-slate-700 mb-3">예약 가능 시간</h2>
+      <div id="slots" class="grid grid-cols-4 gap-2"></div>
+    </div>
+
+    <!-- 예약 폼 -->
+    <div id="form" class="bg-white rounded-xl shadow-sm p-5 mb-5 hidden">
+      <h2 class="text-sm font-semibold text-slate-700 mb-3">선택: <span id="pickedSlot" class="text-blue-600"></span></h2>
+      <div class="flex gap-2 flex-wrap">
+        <input id="name" placeholder="이름" class="border border-slate-300 rounded-lg px-3 py-2 flex-1 min-w-[120px]" />
+        <input id="phone" placeholder="연락처" class="border border-slate-300 rounded-lg px-3 py-2 flex-1 min-w-[120px]" />
+        <button id="bookBtn" class="bg-blue-600 text-white rounded-lg px-5 py-2 font-semibold hover:bg-blue-700">예약 확정</button>
+      </div>
+      <p id="result" class="mt-3 text-sm"></p>
+    </div>
+
+    <!-- 동시 예약 시뮬레이션 -->
+    <div class="bg-white rounded-xl shadow-sm p-5 border-l-4 border-amber-400">
+      <h2 class="text-sm font-semibold text-slate-700 mb-1">⚡ 동시 예약 시뮬레이션</h2>
+      <p class="text-slate-500 text-xs mb-3">같은 시간에 10명이 '동시에' 예약을 시도합니다. 단 한 명만 성공해야 정상입니다.</p>
+      <button id="simBtn" class="bg-amber-500 text-white rounded-lg px-5 py-2 font-semibold hover:bg-amber-600">10명 동시 예약 테스트</button>
+      <div id="simResult" class="mt-4"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:3001/api';
+    const dateEl = document.getElementById('date');
+    let picked = null;
+
+    // 기본 날짜: 다음 달 어느 날(항상 미래)
+    const d = new Date(); d.setMonth(d.getMonth() + 1);
+    dateEl.value = d.toISOString().slice(0, 10);
+
+    async function loadSlots() {
+      picked = null; document.getElementById('form').classList.add('hidden');
+      const res = await fetch(`${API}/bookings/available?date=${dateEl.value}`);
+      const slots = await res.json();
+      const box = document.getElementById('slots');
+      box.innerHTML = '';
+      slots.forEach(s => {
+        const b = document.createElement('button');
+        b.textContent = s.slot;
+        if (s.available) {
+          b.className = 'border border-blue-300 text-blue-700 rounded-lg py-2 hover:bg-blue-50';
+          b.onclick = () => pick(s.slot);
+        } else {
+          b.className = 'border border-slate-200 text-slate-300 bg-slate-50 rounded-lg py-2 cursor-not-allowed line-through';
+          b.disabled = true;
+        }
+        box.appendChild(b);
+      });
+    }
+
+    function pick(slot) {
+      picked = slot;
+      document.getElementById('pickedSlot').textContent = `${dateEl.value} ${slot}`;
+      document.getElementById('form').classList.remove('hidden');
+      document.getElementById('result').textContent = '';
+    }
+
+    document.getElementById('bookBtn').onclick = async () => {
+      const name = document.getElementById('name').value || '홍길동';
+      const phone = document.getElementById('phone').value || '010-1234-5678';
+      const res = await fetch(`${API}/bookings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateEl.value, slot: picked, name, phone }),
+      });
+      const r = document.getElementById('result');
+      if (res.ok) { r.className = 'mt-3 text-sm text-green-600 font-semibold'; r.textContent = '✅ 예약이 확정되었습니다!'; loadSlots(); }
+      else { const e = await res.json(); r.className = 'mt-3 text-sm text-red-600 font-semibold'; r.textContent = '⛔ ' + (e.message || '예약 실패'); }
+    };
+
+    document.getElementById('simBtn').onclick = async () => {
+      // 충돌 보장을 위해 매번 새 날짜의 같은 슬롯에 10건 동시 전송
+      const r = Math.floor(Math.random() * 100000);
+      const simDate = `2031-${String((r % 12) + 1).padStart(2, '0')}-${String((r % 28) + 1).padStart(2, '0')}`;
+      const slot = '14:00';
+      const reqs = Array.from({ length: 10 }, (_, i) =>
+        fetch(`${API}/bookings`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: simDate, slot, name: `손님${i + 1}`, phone: '010-0000-0000' }),
+        }).then(res => res.status));
+      const statuses = await Promise.all(reqs);
+      const ok = statuses.filter(s => s === 201).length;
+      const conflict = statuses.filter(s => s === 409).length;
+      document.getElementById('simResult').innerHTML = `
+        <div class="flex gap-3 mb-3">
+          <div class="flex-1 bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold text-green-600">${ok}</div>
+            <div class="text-xs text-green-700">예약 성공</div>
+          </div>
+          <div class="flex-1 bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+            <div class="text-2xl font-bold text-red-600">${conflict}</div>
+            <div class="text-xs text-red-700">"이미 예약된 시간입니다"로 거절</div>
+          </div>
+        </div>
+        <p class="text-sm font-semibold ${ok === 1 && conflict === 9 ? 'text-green-700' : 'text-red-700'}">
+          ${ok === 1 && conflict === 9 ? '✅ 정확히 1명만 성공 — 이중 예약이 완벽히 차단되었습니다.' : '⚠️ 예상과 다름 — 점검 필요'}
+        </p>`;
+    };
+
+    dateEl.onchange = loadSlots;
+    loadSlots();
+  </script>
+</body>
+</html>

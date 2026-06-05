@@ -43,12 +43,27 @@ export class BookingService {
     try {
       // @@unique([date, slot]) 덕분에, 동시에 들어와도 단 한 건만 성공한다.
       return await this.prisma.$transaction(async (tx) => {
+        // 취소된(또는 노쇼) 예약이 같은 칸에 남아 있으면, 그 행을 되살려 재예약한다.
+        // (취소는 행을 지우지 않고 status만 바꾸므로, 유일성 제약과 충돌하지 않게 재사용한다.)
+        const existing = await tx.booking.findUnique({
+          where: { date_slot: { date: dto.date, slot: dto.slot } },
+        });
+        if (existing) {
+          if (existing.status === 'confirmed') {
+            throw new ConflictException('이미 예약된 시간입니다. 다른 시간을 선택해주세요.');
+          }
+          return tx.booking.update({
+            where: { id: existing.id },
+            data: { name: dto.name, phone: dto.phone, status: 'confirmed', createdAt: new Date() },
+          });
+        }
         return tx.booking.create({
           data: { date: dto.date, slot: dto.slot, name: dto.name, phone: dto.phone },
         });
       });
     } catch (e) {
-      // 유일성 제약 위반(P2002) = 둘째 예약 → 친절한 메시지로 변환
+      if (e instanceof ConflictException) throw e;
+      // 유일성 제약 위반(P2002) = 동시 요청 중 둘째 예약 → 친절한 메시지로 변환
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException('이미 예약된 시간입니다. 다른 시간을 선택해주세요.');
       }

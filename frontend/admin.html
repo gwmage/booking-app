@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>예약 관리자 — 운영 대시보드</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style> body { font-family: 'Malgun Gothic', system-ui, sans-serif; } </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+  <div class="max-w-3xl mx-auto p-6">
+    <header class="mb-6">
+      <h1 class="text-2xl font-bold text-slate-800">예약 운영 대시보드</h1>
+      <p class="text-slate-500 mt-1">1인 운영자가 매일 잠깐 확인하는 핵심 지표입니다.</p>
+    </header>
+
+    <div id="cards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+
+    <div class="bg-white rounded-xl shadow-sm p-5">
+      <h2 class="text-sm font-semibold text-slate-700 mb-4">⏰ 시간대별 예약 분포 (어느 시간이 잘 차는가)</h2>
+      <div id="dist" class="space-y-2"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:3001/api';
+    const card = (label, value, sub, color) => `
+      <div class="bg-white rounded-xl shadow-sm p-4 border-l-4 ${color}">
+        <div class="text-3xl font-bold text-slate-800">${value}</div>
+        <div class="text-xs text-slate-500 mt-1 font-semibold">${label}</div>
+        <div class="text-[11px] text-slate-400">${sub}</div>
+      </div>`;
+    (async () => {
+      const s = await (await fetch(`${API}/bookings/stats`)).json();
+      document.getElementById('cards').innerHTML =
+        card('총 예약', s.total, '누적 건수', 'border-blue-400') +
+        card('확정', s.confirmed, '현재 유효', 'border-emerald-400') +
+        card('취소율', s.cancelRate + '%', `취소 ${s.canceled}건`, 'border-amber-400') +
+        card('노쇼율', s.noshowRate + '%', `노쇼 ${s.noshow}건`, 'border-rose-400');
+      const max = Math.max(1, ...s.slotDist.map(d => d.count));
+      document.getElementById('dist').innerHTML = s.slotDist.map(d => `
+        <div class="flex items-center gap-3 text-sm">
+          <span class="w-14 text-slate-500">${d.slot}</span>
+          <div class="flex-1 bg-slate-100 rounded h-5">
+            <div class="bg-blue-500 h-5 rounded" style="width:${Math.round(d.count / max * 100)}%"></div>
+          </div>
+          <span class="w-8 text-right text-slate-600 font-semibold">${d.count}</span>
+        </div>`).join('');
+    })();
+  </script>
+</body>
+</html>

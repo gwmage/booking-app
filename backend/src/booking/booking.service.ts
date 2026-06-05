@@ -75,11 +75,34 @@ export class BookingService {
     });
   }
 
-  // 예약 취소: 그 슬롯이 다시 예약 가능해지도록 행을 삭제한다.
+  // 예약 취소: status를 canceled로 바꿔 그 슬롯이 다시 예약 가능해지게 한다(이력은 남긴다).
   async cancel(id: number) {
     const found = await this.prisma.booking.findUnique({ where: { id } });
     if (!found) throw new NotFoundException('예약을 찾을 수 없습니다.');
-    await this.prisma.booking.delete({ where: { id } });
+    await this.prisma.booking.update({ where: { id }, data: { status: 'canceled' } });
     return { canceled: true };
+  }
+
+  // 운영 통계: 예약 수·취소율·노쇼율·시간대별 예약 분포
+  async stats() {
+    const all = await this.prisma.booking.findMany();
+    const n = all.length || 1;
+    const confirmed = all.filter((b) => b.status === 'confirmed').length;
+    const canceled = all.filter((b) => b.status === 'canceled').length;
+    const noshow = all.filter((b) => b.status === 'noshow').length;
+    // 시간대(슬롯)별 확정 예약 수
+    const bySlot: Record<string, number> = {};
+    for (const b of all) if (b.status === 'confirmed') bySlot[b.slot] = (bySlot[b.slot] || 0) + 1;
+    const setting = await this.getSetting();
+    const slots = this.buildSlots(setting.openHour, setting.closeHour, setting.slotMin);
+    return {
+      total: all.length,
+      confirmed,
+      canceled,
+      noshow,
+      cancelRate: Math.round((canceled / n) * 100),
+      noshowRate: Math.round((noshow / n) * 100),
+      slotDist: slots.map((s) => ({ slot: s, count: bySlot[s] || 0 })),
+    };
   }
 }

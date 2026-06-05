@@ -18,6 +18,12 @@ export class BookingController {
     return this.booking.available(date);
   }
 
+  // 운영 통계(관리자): GET /api/bookings/stats
+  @Get('stats')
+  stats() {
+    return this.booking.stats();
+  }
+
   // 날짜별 예약 목록
   @Get()
   list(@Query('date') date: string) {
